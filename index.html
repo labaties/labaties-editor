@@ -3,18 +3,14 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>LaBaties Editor — Phase 2 (r1)</title>
+<title>LaBaties Editor — Phase 2 (r3 — Classic Loader)</title>
 <style>
-:root{
-  --bg:#0f1115;--panel:#171a21;--text:#e8e8ea;--muted:#a8abb2;--accent:#6aa9ff;--border:#242a33;
-  --gap:14px;--pad:14px;
-}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
-  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji}
+:root{--bg:#0f1115;--panel:#171a21;--text:#e8e8ea;--muted:#a8abb2;--accent:#6aa9ff;--border:#242a33;--gap:14px;--pad:14px}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji}
 .app{display:grid;grid-template-rows:auto 1fr auto;min-height:100%}
 header,footer{padding:var(--pad);background:var(--panel);border-bottom:1px solid var(--border)}
 footer{border-top:1px solid var(--border);border-bottom:none}
-.content{display:grid;gap:var(--gap);grid-template-columns:1fr; padding:var(--pad)}
+.content{display:grid;gap:var(--gap);grid-template-columns:1fr;padding:var(--pad)}
 @media(min-width:1120px){.content{grid-template-columns:380px 1fr}}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:var(--pad)}
 .controls{display:grid;gap:12px}
@@ -36,25 +32,28 @@ legend{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .status{font-size:12px;color:var(--muted);margin-top:6px}
-.status.ok{color:#3ecf8e}
-.status.warn{color:#ffb020}
-.status.err{color:#ff6b6b}
+.status.ok{color:#3ecf8e}.status.warn{color:#ffb020}.status.err{color:#ff6b6b}
 </style>
 </head>
 <body>
   <div class="app">
-    <header><strong>LaBaties Editor — Phase 2 (r1)</strong> · Background · Tilt · Magic Brush · Shadow · Watermark · Hi‑res Export</header>
+    <header><strong>LaBaties Editor — Phase 2 (r3)</strong> · Background · Tilt · Magic Brush · Shadow · Watermark · Hi‑res Export</header>
 
     <div class="content">
       <div class="card controls">
         <fieldset>
           <legend>Files</legend>
           <div class="grid2">
-            <label class="btn"><input id="bgFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>Upload background</label>
-            <label class="btn"><input id="cardFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>Upload card</label>
+            <!-- Accept ANY image, like Phase‑1 -->
+            <label class="btn"><input id="bgFile" type="file" accept="image/*" hidden>Upload background</label>
+            <label class="btn"><input id="cardFile" type="file" accept="image/*" hidden>Upload card</label>
+          </div>
+          <div class="grid2" style="margin-top:8px">
+            <button id="loadDemo" class="btn">Load Demo Card</button>
+            <button id="clearCard" class="btn">Clear Card</button>
           </div>
           <div id="status" class="status">No images loaded.</div>
-          <div class="small">Tip: If a photo is HEIC/Live Photo, save as PNG/JPG first (Photos → Share → Save to Files → change file type).</div>
+          <div class="small">If a Live Photo/HEIC doesn’t draw, export it as PNG/JPG first (Photos → Share → Save to Files → Options → Most Compatible).</div>
         </fieldset>
 
         <fieldset>
@@ -177,379 +176,111 @@ legend{font-size:12px;color:var(--muted)}
       <button id="loadSettings" class="btn">Load Settings</button>
       <button id="exportPNG" class="btn primary" disabled>Export PNG</button>
       <button id="exportJPG" class="btn" disabled>Export JPG</button>
-      <span class="hint">Export at 2–3× for crisp results. If a file won’t load, convert to PNG/JPG and retry.</span>
+      <span class="hint">Export at 2–3× for crisp results.</span>
     </footer>
   </div>
 
 <script>
 let bgImg=null, cardImg=null;
-let imgLoaded=false;
 const $=id=>document.getElementById(id);
 const canvas=$("canvas");
 const ctx=canvas.getContext("2d",{willReadFrequently:true});
-
 const T={rot:0, skx:0, sky:0, scl:1, tx:0, ty:0, flipX:1, flipY:1};
-
-let maskCanvas=document.createElement("canvas");
-let maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true});
-let maskHistory=[];
-
-let bgOff=document.createElement("canvas");
-let bgCtx=bgOff.getContext("2d");
+let maskCanvas=document.createElement("canvas"), maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}), maskHistory=[];
+let bgOff=document.createElement("canvas"), bgCtx=bgOff.getContext("2d");
 
 function deg(v){return v*Math.PI/180}
 function setCanvasSize(w,h){ if(canvas.width!==w) canvas.width=w; if(canvas.height!==h) canvas.height=h; }
-function pushMaskHistory(){
-  maskHistory.push(maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height));
-  if(maskHistory.length>20) maskHistory.shift();
-}
-function popMaskHistory(){
-  if(maskHistory.length===0) return;
-  const img=maskHistory.pop();
-  maskCtx.putImageData(img,0,0);
-  draw();
-}
 function fitScale(w,h,cw,ch,pad=0.9){ return Math.min(cw/w, ch/h)*pad; }
-function updateOutputs(){
-  $("o-cw").textContent=canvas.width;
-  $("o-ch").textContent=canvas.height;
-  $("o-rot").textContent=T.rot.toFixed(1);
-  $("o-skx").textContent=T.skx.toFixed(1);
-  $("o-sky").textContent=T.sky.toFixed(1);
-  $("o-scl").textContent=T.scl.toFixed(2);
-  $("o-tx").textContent=T.tx|0;
-  $("o-ty").textContent=T.ty|0;
-  $("o-bsize").textContent=$("brushSize").value;
-  $("o-bhard").textContent=$("brushHard").value;
-  $("o-bgo").textContent=parseFloat($("bgOpacity").value).toFixed(2);
-  $("o-bgb").textContent=$("bgBlur").value;
-  $("o-ols").textContent=$("outlineSize").value;
-  $("o-sb").textContent=$("shadowBlur").value;
-  $("o-sy").textContent=$("shadowY").value;
-  $("o-wms").textContent=$("wmSize").value;
-  $("o-wmo").textContent=parseFloat($("wmOpacity").value).toFixed(2);
-  $("o-wmx").textContent=$("wmX").value;
-  $("o-wmy").textContent=$("wmY").value;
-  $("o-scale").textContent=parseFloat($("exps").value).toFixed(1)+"×";
-}
+function pushMaskHistory(){ maskHistory.push(maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height)); if(maskHistory.length>20) maskHistory.shift(); }
+function popMaskHistory(){ if(!maskHistory.length) return; maskCtx.putImageData(maskHistory.pop(),0,0); draw(); }
+function updateOutputs(){ $("o-cw").textContent=canvas.width; $("o-ch").textContent=canvas.height; $("o-rot").textContent=T.rot.toFixed(1); $("o-skx").textContent=T.skx.toFixed(1); $("o-sky").textContent=T.sky.toFixed(1); $("o-scl").textContent=T.scl.toFixed(2); $("o-tx").textContent=T.tx|0; $("o-ty").textContent=T.ty|0; $("o-bsize").textContent=$("brushSize").value; $("o-bhard").textContent=$("brushHard").value; $("o-bgo").textContent=parseFloat($("bgOpacity").value).toFixed(2); $("o-bgb").textContent=$("bgBlur").value; $("o-ols").textContent=$("outlineSize").value; $("o-sb").textContent=$("shadowBlur").value; $("o-sy").textContent=$("shadowY").value; $("o-wms").textContent=$("wmSize").value; $("o-wmo").textContent=parseFloat($("wmOpacity").value).toFixed(2); $("o-wmx").textContent=$("wmX").value; $("o-wmy").textContent=$("wmY").value; $("o-scale").textContent=parseFloat($("exps").value).toFixed(1)+"×"; }
 
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  const btype=$("bgType").value;
-  const b1=$("bg1").value, b2=$("bg2").value;
-  const bgo=parseFloat($("bgOpacity").value);
-  const bblur=parseInt($("bgBlur").value,10);
-
-  if(btype==="solid"){
-    ctx.globalAlpha=bgo;
-    ctx.fillStyle=b1; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalAlpha=1;
-  }else if(btype==="gradient"){
-    let g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);
-    g.addColorStop(0,b1); g.addColorStop(1,b2);
-    ctx.globalAlpha=bgo;
-    ctx.fillStyle=g; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalAlpha=1;
-  }else if(btype==="image" && bgImg){
-    bgOff.width=canvas.width; bgOff.height=canvas.height;
-    let scl=fitScale(bgImg.width,bgImg.height,canvas.width,canvas.height,1.0);
-    let iw=bgImg.width*scl, ih=bgImg.height*scl;
-    bgCtx.clearRect(0,0,bgOff.width,bgOff.height);
-    bgCtx.drawImage(bgImg,(canvas.width-iw)/2,(canvas.height-ih)/2,iw,ih);
-    ctx.save();
-    if(bblur>0){ ctx.filter=`blur(${bblur}px)`; }
-    ctx.globalAlpha=bgo;
-    ctx.drawImage(bgOff,0,0);
-    ctx.filter="none"; ctx.globalAlpha=1; ctx.restore();
-  }
-
+  const btype=$("bgType").value, b1=$("bg1").value, b2=$("bg2").value, bgo=parseFloat($("bgOpacity").value), bblur=parseInt($("bgBlur").value,10);
+  if(btype==="solid"){ ctx.globalAlpha=bgo; ctx.fillStyle=b1; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=1; }
+  else if(btype==="gradient"){ let g=ctx.createLinearGradient(0,0,canvas.width,canvas.height); g.addColorStop(0,b1); g.addColorStop(1,b2); ctx.globalAlpha=bgo; ctx.fillStyle=g; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=1; }
+  else if(btype==="image" && bgImg){ bgOff.width=canvas.width; bgOff.height=canvas.height; let scl=fitScale(bgImg.width,bgImg.height,canvas.width,canvas.height,1.0); let iw=bgImg.width*scl, ih=bgImg.height*scl; bgCtx.clearRect(0,0,bgOff.width,bgOff.height); bgCtx.drawImage(bgImg,(canvas.width-iw)/2,(canvas.height-ih)/2,iw,ih); ctx.save(); if(bblur>0){ ctx.filter=`blur(${bblur}px)`; } ctx.globalAlpha=bgo; ctx.drawImage(bgOff,0,0); ctx.filter="none"; ctx.globalAlpha=1; ctx.restore(); }
   if(!cardImg){ updateOutputs(); return; }
-
-  const rot=deg(T.rot), skx=deg(T.skx), sky=deg(T.sky);
-  const cos=Math.cos(rot), sin=Math.sin(rot);
-  const tanx=Math.tan(skx), tany=Math.tan(sky);
-  let a=T.scl*cos, b=T.scl*sin, c=-T.scl*sin, d=T.scl*cos;
-  const a2=a + b*tany, b2=a*tanx + b, c2=c + d*tany, d2=c*tanx + d;
-
-  const off=document.createElement("canvas");
-  off.width=cardImg.width; off.height=cardImg.height;
-  const octx=off.getContext("2d");
-  octx.clearRect(0,0,off.width,off.height);
-  octx.drawImage(cardImg,0,0);
-  if(maskCanvas.width && maskCanvas.height){
-    octx.globalCompositeOperation="destination-in";
-    octx.drawImage(maskCanvas,0,0);
-    octx.globalCompositeOperation="source-over";
-  }
-
-  const outline=parseInt($("outlineSize").value,10);
-  const ocol=$("outlineColor").value;
-  const sBlur=parseInt($("shadowBlur").value,10);
-  const sY=parseInt($("shadowY").value,10);
-  const scol=$("shadowColor").value;
-
-  ctx.save();
-  ctx.setTransform(a2*T.flipX, b2, c2, d2*T.flipY, canvas.width/2 + T.tx, canvas.height/2 + T.ty);
-
-  if(outline>0){
-    ctx.save();
-    ctx.shadowBlur=0; ctx.shadowColor="transparent";
-    ctx.strokeStyle=ocol; ctx.lineWidth=outline;
-    ctx.strokeRect(-off.width/2, -off.height/2, off.width, off.height);
-    ctx.restore();
-  }
-
-  if(sBlur>0 || sY!==0){
-    ctx.save();
-    ctx.shadowBlur=sBlur; ctx.shadowColor=scol; ctx.shadowOffsetX=0; ctx.shadowOffsetY=sY;
-    ctx.drawImage(off, -off.width/2, -off.height/2);
-    ctx.restore();
-  }
-
-  ctx.drawImage(off, -off.width/2, -off.height/2);
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.restore();
-
-  const wtxt=$("wmText").value.trim();
-  if(wtxt){
-    const size=parseInt($("wmSize").value,10);
-    const op=parseFloat($("wmOpacity").value);
-    const wx=parseInt($("wmX").value,10);
-    const wy=parseInt($("wmY").value,10);
-    ctx.save();
-    ctx.globalAlpha=op;
-    ctx.font=`${size}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
-    ctx.fillStyle="white"; ctx.textAlign="right"; ctx.textBaseline="bottom";
-    ctx.fillText(wtxt, canvas.width-20 + wx, canvas.height-20 + wy);
-    ctx.restore();
-  }
-
+  const rot=deg(T.rot), skx=deg(T.skx), sky=deg(T.sky), cos=Math.cos(rot), sin=Math.sin(rot), tanx=Math.tan(skx), tany=Math.tan(sky);
+  let a=T.scl*cos, b=T.scl*sin, c=-T.scl*sin, d=T.scl*cos; const a2=a + b*tany, b2=a*tanx + b, c2=c + d*tany, d2=c*tanx + d;
+  const off=document.createElement("canvas"); off.width=cardImg.width; off.height=cardImg.height; const octx=off.getContext("2d"); octx.drawImage(cardImg,0,0);
+  if(maskCanvas.width&&maskCanvas.height){ octx.globalCompositeOperation="destination-in"; octx.drawImage(maskCanvas,0,0); octx.globalCompositeOperation="source-over"; }
+  const outline=parseInt($("outlineSize").value,10), ocol=$("outlineColor").value, sBlur=parseInt($("shadowBlur").value,10), sY=parseInt($("shadowY").value,10), scol=$("shadowColor").value;
+  ctx.save(); ctx.setTransform(a2*T.flipX,b2,c2,d2*T.flipY, canvas.width/2 + T.tx, canvas.height/2 + T.ty);
+  if(outline>0){ ctx.save(); ctx.shadowBlur=0; ctx.shadowColor="transparent"; ctx.strokeStyle=ocol; ctx.lineWidth=outline; ctx.strokeRect(-off.width/2,-off.height/2,off.width,off.height); ctx.restore(); }
+  if(sBlur>0||sY!==0){ ctx.save(); ctx.shadowBlur=sBlur; ctx.shadowColor=scol; ctx.shadowOffsetX=0; ctx.shadowOffsetY=sY; ctx.drawImage(off,-off.width/2,-off.height/2); ctx.restore(); }
+  ctx.drawImage(off,-off.width/2,-off.height/2); ctx.setTransform(1,0,0,1,0,0); ctx.restore();
+  const wtxt=$("wmText").value.trim(); if(wtxt){ const size=parseInt($("wmSize").value,10), op=parseFloat($("wmOpacity").value), wx=parseInt($("wmX").value,10), wy=parseInt($("wmY").value,10); ctx.save(); ctx.globalAlpha=op; ctx.font=`${size}px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial`; ctx.fillStyle="white"; ctx.textAlign="right"; ctx.textBaseline="bottom"; ctx.fillText(wtxt, canvas.width-20+wx, canvas.height-20+wy); ctx.restore(); }
   updateOutputs();
 }
 
-// ---------- Robust image loader (blob URL + FileReader fallback) ----------
-function readImageFile(file, cb){
+// -------- Classic Phase‑1 style loaders (no early revoke, accept image/*) --------
+function loadViaBlobURL(file, onOK, label){
   const status=$("status");
-  if(!file){ status.textContent="No file selected."; return; }
-
-  const ext=(file.name.split(".").pop()||"").toLowerCase();
-  const type=file.type || "";
-  const isHeic = ext==="heic" || type==="image/heic" || type==="image/heif" || ext==="heif";
-
-  // Warn on HEIC/HEIF right away
-  if(isHeic){
-    status.className="status warn";
-    status.textContent=`${file.name} (${type||'HEIC'}) — iOS HEIC isn’t supported by Canvas. Save as PNG/JPG and re‑upload.`;
-    return;
-  }
-
-  // 1) Try blob URL fast‑path
   try{
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = ()=>{ URL.revokeObjectURL(url); cb(img, file); };
-    img.onerror = ()=>{
-      URL.revokeObjectURL(url);
-      // 2) Fallback to FileReader (base64)
-      const fr = new FileReader();
-      fr.onload = ()=>{
-        const img2 = new Image();
-        img2.onload = ()=> cb(img2, file);
-        img2.onerror = ()=>{
-          status.className="status err";
-          status.textContent=`Couldn’t read ${file.name}. Try saving as PNG/JPG and re‑upload.`;
-        };
-        img2.src = fr.result;
-      };
-      fr.readAsDataURL(file);
-    };
+    img.onload = ()=>{ status.className="status ok"; status.textContent=`${label} loaded: ${file.name} (${img.width}×${img.height})`; onOK(img); /* do NOT revoke early on iOS */ };
+    img.onerror = ()=>{ status.className="status err"; status.textContent=`Couldn’t load ${file.name}. If it’s HEIC/Live Photo, save as PNG/JPG and retry.`; };
     img.src = url;
   }catch(e){
-    status.className="status err";
-    status.textContent = `Load error: ${e.message}`;
+    status.className="status err"; status.textContent=`Load error: ${e.message}`;
   }
 }
 
-function handleBGFile(f){
-  const status=$("status");
-  readImageFile(f, (im, file)=>{
-    bgImg=im;
-    status.className="status ok";
-    status.textContent=`Background loaded: ${file.name} (${im.width}×${im.height}, ${file.type||'unknown'})`;
-    draw();
-  });
+function handleBGFile(file){
+  loadViaBlobURL(file,(im)=>{ bgImg=im; draw(); },"Background");
 }
-function handleCardFile(f){
-  const status=$("status");
-  readImageFile(f, (im, file)=>{
-    cardImg=im; imgLoaded=true; $("exportPNG").disabled=false; $("exportJPG").disabled=false;
-    maskCanvas.width=im.width; maskCanvas.height=im.height;
-    maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
-    maskCtx.fillStyle="black"; maskCtx.fillRect(0,0,maskCanvas.width,maskCanvas.height);
-    pushMaskHistory();
-    T.tx=0; T.ty=0; T.scl=fitScale(im.width, im.height, canvas.width, canvas.height, 0.8);
-    $("scl").value=T.scl;
-    status.className="status ok";
-    status.textContent=`Card loaded: ${file.name} (${im.width}×${im.height}, ${file.type||'unknown'})`;
-    draw();
-  });
+function handleCardFile(file){
+  loadViaBlobURL(file,(im)=>{
+    cardImg=im; $("exportPNG").disabled=false; $("exportJPG").disabled=false;
+    maskCanvas.width=im.width; maskCanvas.height=im.height; maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height); maskCtx.fillStyle="black"; maskCtx.fillRect(0,0,maskCanvas.width,maskCanvas.height); pushMaskHistory();
+    T.tx=0; T.ty=0; T.scl=fitScale(im.width,im.height,canvas.width,canvas.height,0.8); $("scl").value=T.scl; draw();
+  },"Card");
 }
 
 $("bgFile").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) handleBGFile(f); });
 $("cardFile").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) handleCardFile(f); });
 
-// ---------- Controls ----------
-["rot","skx","sky","scl","tx","ty"].forEach(id=>{
-  $(id).addEventListener("input", ()=>{ T[id]=parseFloat($(id).value); draw(); });
+// Demo button (embedded PNG so we can verify the render path even if picker fails)
+$("loadDemo").addEventListener("click", ()=>{
+  const status=$("status");
+  const demo=new Image();
+  demo.onload=()=>{ cardImg=demo; $("exportPNG").disabled=false; $("exportJPG").disabled=false;
+    maskCanvas.width=demo.width; maskCanvas.height=demo.height; maskCtx.fillStyle="black"; maskCtx.fillRect(0,0,maskCanvas.width,maskCanvas.height); pushMaskHistory();
+    T.tx=0; T.ty=0; T.scl=fitScale(demo.width,demo.height,canvas.width,canvas.height,0.8); $("scl").value=T.scl;
+    status.className="status ok"; status.textContent=`Demo card loaded (${demo.width}×${demo.height})`; draw();
+  };
+  demo.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAACgCAYAAABd3M5cAAAACXBIWXMAAAsSAAALEgHS3X78AAABmElEQVR4nO3RMQEAIAwEsXv/0cYcZ6m0uQbKQ+o1wz4yAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwq8JcH8uWwA3y0K3gkG0w0GkL9gJgnv6kQx7jKQ3w1s4nQ0y2wqv0oD3mKp4n9uox5Yw7yN2gQ7z6m4k9pFJbA6aF1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1sC7oU1w9M6sQvQ4m1uC7f8Bz82w3B6bH8wAAAABJRU5ErkJggg==";
 });
+$("clearCard").addEventListener("click", ()=>{ cardImg=null; $("exportPNG").disabled=true; $("exportJPG").disabled=true; $("status").className="status"; $("status").textContent="Card cleared."; draw(); });
 
+// Transforms & UI
+["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).addEventListener("input", ()=>{ T[id]=parseFloat($(id).value); draw(); }));
 $("flipH").addEventListener("click", ()=>{ T.flipX*=-1; draw(); });
 $("flipV").addEventListener("click", ()=>{ T.flipY*=-1; draw(); });
-
 $("presetLeft").addEventListener("click", ()=>{ T.skx=14; T.rot=-4; $("skx").value=T.skx; $("rot").value=T.rot; draw(); });
 $("presetRight").addEventListener("click", ()=>{ T.skx=-14; T.rot=4; $("skx").value=T.skx; $("rot").value=T.rot; draw(); });
-
-$("applyPreset").addEventListener("click", ()=>{
-  const p=$("preset").value;
-  const map={"1080x1920":[1080,1920],"1080x1350":[1080,1350],"1080x1080":[1080,1080],"1920x1080":[1920,1080]};
-  const s=map[p]; if(s){ setCanvasSize(s[0],s[1]); $("cw").value=s[0]; $("ch").value=s[1]; }
-  draw();
-});
-["cw","ch"].forEach(id=>$(id).addEventListener("input", ()=>{
-  setCanvasSize(parseInt($("cw").value,10), parseInt($("ch").value,10));
-  draw();
-}));
+$("applyPreset").addEventListener("click", ()=>{ const p=$("preset").value; const map={"1080x1920":[1080,1920],"1080x1350":[1080,1350],"1080x1080":[1080,1080],"1920x1080":[1920,1080]}; const s=map[p]; if(s){ setCanvasSize(s[0],s[1]); $("cw").value=s[0]; $("ch").value=s[1]; } draw(); });
+["cw","ch"].forEach(id=>$(id).addEventListener("input", ()=>{ setCanvasSize(parseInt($("cw").value,10), parseInt($("ch").value,10)); draw(); }));
 $("exps").addEventListener("input", updateOutputs);
+["bgType","bg1","bg2","bgOpacity","bgBlur","outlineSize","outlineColor","shadowBlur","shadowY","shadowColor","wmText","wmSize","wmOpacity","wmX","wmY"].forEach(id=>$(id).addEventListener("input", draw));
 
-["bgType","bg1","bg2","bgOpacity","bgBlur"].forEach(id=>$(id).addEventListener("input", draw));
-["outlineSize","outlineColor","shadowBlur","shadowY","shadowColor"].forEach(id=>$(id).addEventListener("input", draw));
-["wmText","wmSize","wmOpacity","wmX","wmY"].forEach(id=>$(id).addEventListener("input", draw));
+$("reset").addEventListener("click", ()=>{ if(cardImg){ T.rot=0; T.skx=0; T.sky=0; T.scl=fitScale(cardImg.width, canvas.height?cardImg.height:cardImg.height, canvas.width, canvas.height, 0.8); T.tx=0; T.ty=0; T.flipX=1; T.flipY=1; ["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).value=T[id]); } draw(); });
+$("center").addEventListener("click", ()=>{ if(cardImg){ T.tx=0; T.ty=0; T.scl=fitScale(cardImg.width, cardImg.height, canvas.width, canvas.height, 0.8); $("tx").value=0; $("ty").value=0; $("scl").value=T.scl; } draw(); });
 
-$("reset").addEventListener("click", ()=>{
-  if(cardImg){
-    T.rot=0; T.skx=0; T.sky=0; T.scl=fitScale(cardImg.width, cardImg.height, canvas.width, canvas.height, 0.8);
-    T.tx=0; T.ty=0; T.flipX=1; T.flipY=1;
-    ["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).value=T[id]);
-  }
-  draw();
-});
-$("center").addEventListener("click", ()=>{
-  if(cardImg){
-    T.tx=0; T.ty=0; T.scl=fitScale(cardImg.width, cardImg.height, canvas.width, canvas.height, 0.8);
-    $("tx").value=0; $("ty").value=0; $("scl").value=T.scl;
-  }
-  draw();
-});
+// Save/Load + Export
+$("saveSettings").addEventListener("click", ()=>{ const d={ cw:canvas.width,ch:canvas.height,T:{...T}, bgType:$("bgType").value,bg1:$("bg1").value,bg2:$("bg2").value,bgOpacity:$("bgOpacity").value,bgBlur:$("bgBlur").value, outlineSize:$("outlineSize").value,outlineColor:$("outlineColor").value, shadowBlur:$("shadowBlur").value,shadowY:$("shadowY").value,shadowColor:$("shadowColor").value, wmText:$("wmText").value,wmSize:$("wmSize").value,wmOpacity:$("wmOpacity").value,wmX:$("wmX").value,wmY:$("wmY").value }; localStorage.setItem("labatiesV2", JSON.stringify(d)); alert("Settings saved."); });
+$("loadSettings").addEventListener("click", ()=>{ const s=localStorage.getItem("labatiesV2"); if(!s){ alert("No saved settings yet."); return; } const d=JSON.parse(s); setCanvasSize(d.cw,d.ch); $("cw").value=d.cw; $("ch").value=d.ch; Object.assign(T,d.T); ["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).value=T[id]); ["bgType","bg1","bg2","bgOpacity","bgBlur","outlineSize","outlineColor","shadowBlur","shadowY","shadowColor","wmText","wmSize","wmOpacity","wmX","wmY"].forEach(id=>{ if(d[id]!==undefined) $(id).value=d[id]; }); draw(); });
 
-// ---------- Brush (Mask) ----------
-let painting=false;
-let lastX=0,lastY=0;
-function getCanvasPoint(ev){
-  const rect=canvas.getBoundingClientRect();
-  const x=(ev.touches?ev.touches[0].clientX:ev.clientX)-rect.left;
-  const y=(ev.touches?ev.touches[0].clientY:ev.clientY)-rect.top;
-  const rot=deg(T.rot), skx=deg(T.skx), sky=deg(T.sky);
-  const cos=Math.cos(rot), sin=Math.sin(rot);
-  const tanx=Math.tan(skx), tany=Math.tan(sky);
-  let a=T.scl*cos, b=T.scl*sin, c=-T.scl*sin, d=T.scl*cos;
-  const a2=a + b*tany, b2=a*tanx + b, c2=c + d*tany, d2=c*tanx + d;
-  const A=a2*T.flipX, B=b2, C=c2, D=d2*T.flipY;
-  const det=A*D - B*C;
-  if(Math.abs(det)<1e-6) return {ix:-1,iy:-1};
-  const px=x - (canvas.width/2 + T.tx);
-  const py=y - (canvas.height/2 + T.ty);
-  const ix=( D*px - B*py)/det + cardImg.width/2;
-  const iy=(-C*px + A*py)/det + cardImg.height/2;
-  return {ix,iy};
-}
-function paintAt(ix,iy){
-  if(!cardImg) return;
-  const size=parseInt($("brushSize").value,10);
-  const hard=parseFloat($("brushHard").value);
-  const mode=$("brushMode").value;
-  const g=maskCtx.createRadialGradient(ix,iy, size*hard*0.5, ix,iy, size*0.5);
-  if(mode==="erase"){
-    g.addColorStop(0,"rgba(0,0,0,0)");
-    g.addColorStop(1,"rgba(0,0,0,1)");
-    maskCtx.globalCompositeOperation="destination-out";
-  }else{
-    g.addColorStop(0,"rgba(0,0,0,1)");
-    g.addColorStop(1,"rgba(0,0,0,0)");
-    maskCtx.globalCompositeOperation="source-over";
-  }
-  maskCtx.fillStyle=g;
-  maskCtx.beginPath();
-  maskCtx.arc(ix,iy,size*0.5,0,Math.PI*2);
-  maskCtx.fill();
-}
-
-canvas.addEventListener("pointerdown",(e)=>{
-  if(!cardImg) return;
-  painting=true; canvas.setPointerCapture(e.pointerId);
-  const {ix,iy}=getCanvasPoint(e);
-  pushMaskHistory();
-  paintAt(ix,iy); lastX=ix; lastY=iy; draw();
-});
-canvas.addEventListener("pointermove",(e)=>{
-  if(!painting) return;
-  const {ix,iy}=getCanvasPoint(e);
-  const steps=Math.max(1, Math.hypot(ix-lastX,iy-lastY)/8|0);
-  for(let i=1;i<=steps;i++){
-    const x=lastX + (ix-lastX)*i/steps;
-    const y=lastY + (iy-lastY)*i/steps;
-    paintAt(x,y);
-  }
-  lastX=ix; lastY=iy; draw();
-});
-canvas.addEventListener("pointerup",(e)=>{ painting=false; canvas.releasePointerCapture(e.pointerId); });
-canvas.addEventListener("pointercancel",()=>{ painting=false; });
-
-$("brushUndo").addEventListener("click", popMaskHistory);
-
-// ---------- Save / Load ----------
-$("saveSettings").addEventListener("click", ()=>{
-  const data={
-    cw:canvas.width,ch:canvas.height, T:{...T},
-    bgType:$("bgType").value,bg1:$("bg1").value,bg2:$("bg2").value,
-    bgOpacity:$("bgOpacity").value,bgBlur:$("bgBlur").value,
-    outlineSize:$("outlineSize").value, outlineColor:$("outlineColor").value,
-    shadowBlur:$("shadowBlur").value, shadowY:$("shadowY").value, shadowColor:$("shadowColor").value,
-    wmText:$("wmText").value, wmSize:$("wmSize").value, wmOpacity:$("wmOpacity").value, wmX:$("wmX").value, wmY:$("wmY").value
-  };
-  localStorage.setItem("labatiesV2", JSON.stringify(data));
-  alert("Settings saved.");
-});
-$("loadSettings").addEventListener("click", ()=>{
-  const s=localStorage.getItem("labatiesV2");
-  if(!s){ alert("No saved settings yet."); return; }
-  const d=JSON.parse(s);
-  setCanvasSize(d.cw,d.ch); $("cw").value=d.cw; $("ch").value=d.ch;
-  Object.assign(T,d.T);
-  ["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).value=T[id]);
-  ["bgType","bg1","bg2","bgOpacity","bgBlur","outlineSize","outlineColor","shadowBlur","shadowY","shadowColor","wmText","wmSize","wmOpacity","wmX","wmY"].forEach(id=>{ if(d[id]!==undefined) $(id).value=d[id]; });
-  draw();
-});
-
-// ---------- Export ----------
-function exportImage(type="image/png"){
-  const scale=parseFloat($("exps").value);
-  const out=document.createElement("canvas");
-  out.width=canvas.width*scale;
-  out.height=canvas.height*scale;
-  const o=out.getContext("2d");
-  o.imageSmoothingQuality="high";
-  o.drawImage(canvas,0,0,out.width,out.height);
-  const link=document.createElement("a");
-  link.download= type==="image/png" ? "labaties-edit.png" : "labaties-edit.jpg";
-  link.href=out.toDataURL(type, 0.95);
-  link.click();
-}
+function exportImage(type="image/png"){ const scale=parseFloat($("exps").value); const out=document.createElement("canvas"); out.width=canvas.width*scale; out.height=canvas.height*scale; const o=out.getContext("2d"); o.imageSmoothingQuality="high"; o.drawImage(canvas,0,0,out.width,out.height); const link=document.createElement("a"); link.download= type==="image/png" ? "labaties-edit.png" : "labaties-edit.jpg"; link.href=out.toDataURL(type,0.95); link.click(); }
 $("exportPNG").addEventListener("click", ()=>exportImage("image/png"));
 $("exportJPG").addEventListener("click", ()=>exportImage("image/jpeg"));
 
-// ---------- Init ----------
-setCanvasSize(1080,1920);
-draw();
+// Init
+setCanvasSize(1080,1920); draw();
 </script>
 </body>
 </html>
