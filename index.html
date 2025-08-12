@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>LaBaties Editor — Phase 2</title>
+<title>LaBaties Editor — Phase 2 (r1)</title>
 <style>
 :root{
   --bg:#0f1115;--panel:#171a21;--text:#e8e8ea;--muted:#a8abb2;--accent:#6aa9ff;--border:#242a33;
@@ -22,7 +21,7 @@ footer{border-top:1px solid var(--border);border-bottom:none}
 .row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 label{font-size:14px;color:var(--muted)}
 output{min-width:60px;text-align:right}
-select, input[type="color"], input[type="text"]{background:#1d232d;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px}
+select,input[type="color"],input[type="text"]{background:#1d232d;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px}
 .slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;background:#2a2f39}
 .slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);border:none;box-shadow:0 0 0 4px rgba(106,169,255,.15)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#1d232d;color:var(--text);font-weight:600;cursor:pointer}
@@ -36,21 +35,26 @@ fieldset{border:1px solid var(--border);border-radius:10px;padding:10px}
 legend{font-size:12px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.status{font-size:12px;color:var(--muted);margin-top:6px}
+.status.ok{color:#3ecf8e}
+.status.warn{color:#ffb020}
+.status.err{color:#ff6b6b}
 </style>
 </head>
 <body>
   <div class="app">
-    <header><strong>LaBaties Editor — Phase 2</strong> · Background · Tilt · Magic Brush · Shadow · Watermark · Hi‑res Export</header>
+    <header><strong>LaBaties Editor — Phase 2 (r1)</strong> · Background · Tilt · Magic Brush · Shadow · Watermark · Hi‑res Export</header>
 
     <div class="content">
       <div class="card controls">
         <fieldset>
           <legend>Files</legend>
           <div class="grid2">
-            <label class="btn"><input id="bgFile" type="file" accept="image/*" hidden>Upload background</label>
-            <label class="btn"><input id="cardFile" type="file" accept="image/*" hidden>Upload card</label>
+            <label class="btn"><input id="bgFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>Upload background</label>
+            <label class="btn"><input id="cardFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>Upload card</label>
           </div>
-          <div id="status" class="small">No images loaded.</div>
+          <div id="status" class="status">No images loaded.</div>
+          <div class="small">Tip: If a photo is HEIC/Live Photo, save as PNG/JPG first (Photos → Share → Save to Files → change file type).</div>
         </fieldset>
 
         <fieldset>
@@ -110,7 +114,6 @@ legend{font-size:12px;color:var(--muted)}
           <input id="tx" class="slider" type="range" min="-2000" max="2000" step="1" value="0">
           <div class="row"><label>Offset Y</label><output id="o-ty">0</output></div>
           <input id="ty" class="slider" type="range" min="-2000" max="2000" step="1" value="0">
-
           <div class="grid2">
             <button id="flipH" class="btn">Flip H</button>
             <button id="flipV" class="btn">Flip V</button>
@@ -130,7 +133,7 @@ legend{font-size:12px;color:var(--muted)}
           <input id="brushSize" class="slider" type="range" min="10" max="300" step="1" value="60">
           <div class="row"><label>Hardness</label><output id="o-bhard">0.7</output></div>
           <input id="brushHard" class="slider" type="range" min="0" max="1" step="0.05" value="0.7">
-          <div class="small">Tip: draw directly on the canvas with Apple Pencil/finger.</div>
+          <div class="small">Paint directly on the canvas with Apple Pencil/finger.</div>
         </fieldset>
 
         <fieldset>
@@ -141,7 +144,7 @@ legend{font-size:12px;color:var(--muted)}
           <div class="row"><label>Shadow Blur</label><output id="o-sb">18</output></div>
           <input id="shadowBlur" class="slider" type="range" min="0" max="60" step="1" value="18">
           <div class="row"><label>Shadow Y</label><output id="o-sy">12</output></div>
-          <input id="shadowY" class="slider" type="range" min="0" max="80" step="1" value="12">
+          <input id="shadowY" class="slider" type="range" min="-80" max="80" step="1" value="12">
           <input id="shadowColor" type="color" value="#000000">
         </fieldset>
 
@@ -162,7 +165,6 @@ legend{font-size:12px;color:var(--muted)}
           <button id="reset" class="btn">Reset</button>
           <button id="center" class="btn">Center Card</button>
         </div>
-
       </div>
 
       <div class="canvas-wrap card">
@@ -175,7 +177,7 @@ legend{font-size:12px;color:var(--muted)}
       <button id="loadSettings" class="btn">Load Settings</button>
       <button id="exportPNG" class="btn primary" disabled>Export PNG</button>
       <button id="exportJPG" class="btn" disabled>Export JPG</button>
-      <span class="hint">Use Apple Pencil/finger to paint the mask. Export at 2–3× for crisp results.</span>
+      <span class="hint">Export at 2–3× for crisp results. If a file won’t load, convert to PNG/JPG and retry.</span>
     </footer>
   </div>
 
@@ -325,20 +327,61 @@ function draw(){
   updateOutputs();
 }
 
-function loadImageFromFile(input, cb){
-  const f=input.files[0]; if(!f) return;
-  const url=URL.createObjectURL(f);
-  const im=new Image();
-  im.onload=()=>{ cb(im); URL.revokeObjectURL(url); };
-  im.onerror=()=>{ alert("Couldn’t load that image. Try PNG/JPG."); };
-  im.src=url;
+// ---------- Robust image loader (blob URL + FileReader fallback) ----------
+function readImageFile(file, cb){
+  const status=$("status");
+  if(!file){ status.textContent="No file selected."; return; }
+
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  const type=file.type || "";
+  const isHeic = ext==="heic" || type==="image/heic" || type==="image/heif" || ext==="heif";
+
+  // Warn on HEIC/HEIF right away
+  if(isHeic){
+    status.className="status warn";
+    status.textContent=`${file.name} (${type||'HEIC'}) — iOS HEIC isn’t supported by Canvas. Save as PNG/JPG and re‑upload.`;
+    return;
+  }
+
+  // 1) Try blob URL fast‑path
+  try{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ URL.revokeObjectURL(url); cb(img, file); };
+    img.onerror = ()=>{
+      URL.revokeObjectURL(url);
+      // 2) Fallback to FileReader (base64)
+      const fr = new FileReader();
+      fr.onload = ()=>{
+        const img2 = new Image();
+        img2.onload = ()=> cb(img2, file);
+        img2.onerror = ()=>{
+          status.className="status err";
+          status.textContent=`Couldn’t read ${file.name}. Try saving as PNG/JPG and re‑upload.`;
+        };
+        img2.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    };
+    img.src = url;
+  }catch(e){
+    status.className="status err";
+    status.textContent = `Load error: ${e.message}`;
+  }
 }
 
-$("bgFile").addEventListener("change", e=>{
-  loadImageFromFile(e.target, (im)=>{ bgImg=im; $("status").textContent="Background loaded."; draw(); });
-});
-$("cardFile").addEventListener("change", e=>{
-  loadImageFromFile(e.target, (im)=>{
+function handleBGFile(f){
+  const status=$("status");
+  readImageFile(f, (im, file)=>{
+    bgImg=im;
+    status.className="status ok";
+    status.textContent=`Background loaded: ${file.name} (${im.width}×${im.height}, ${file.type||'unknown'})`;
+    draw();
+  });
+}
+function handleCardFile(f){
+  const status=$("status");
+  readImageFile(f, (im, file)=>{
     cardImg=im; imgLoaded=true; $("exportPNG").disabled=false; $("exportJPG").disabled=false;
     maskCanvas.width=im.width; maskCanvas.height=im.height;
     maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
@@ -346,11 +389,16 @@ $("cardFile").addEventListener("change", e=>{
     pushMaskHistory();
     T.tx=0; T.ty=0; T.scl=fitScale(im.width, im.height, canvas.width, canvas.height, 0.8);
     $("scl").value=T.scl;
-    $("status").textContent="Card loaded.";
+    status.className="status ok";
+    status.textContent=`Card loaded: ${file.name} (${im.width}×${im.height}, ${file.type||'unknown'})`;
     draw();
   });
-});
+}
 
+$("bgFile").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) handleBGFile(f); });
+$("cardFile").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) handleCardFile(f); });
+
+// ---------- Controls ----------
 ["rot","skx","sky","scl","tx","ty"].forEach(id=>{
   $(id).addEventListener("input", ()=>{ T[id]=parseFloat($(id).value); draw(); });
 });
@@ -358,12 +406,8 @@ $("cardFile").addEventListener("change", e=>{
 $("flipH").addEventListener("click", ()=>{ T.flipX*=-1; draw(); });
 $("flipV").addEventListener("click", ()=>{ T.flipY*=-1; draw(); });
 
-$("presetLeft").addEventListener("click", ()=>{
-  T.skx=14; T.rot=-4; $("skx").value=T.skx; $("rot").value=T.rot; draw();
-});
-$("presetRight").addEventListener("click", ()=>{
-  T.skx=-14; T.rot=4; $("skx").value=T.skx; $("rot").value=T.rot; draw();
-});
+$("presetLeft").addEventListener("click", ()=>{ T.skx=14; T.rot=-4; $("skx").value=T.skx; $("rot").value=T.rot; draw(); });
+$("presetRight").addEventListener("click", ()=>{ T.skx=-14; T.rot=4; $("skx").value=T.skx; $("rot").value=T.rot; draw(); });
 
 $("applyPreset").addEventListener("click", ()=>{
   const p=$("preset").value;
@@ -371,19 +415,21 @@ $("applyPreset").addEventListener("click", ()=>{
   const s=map[p]; if(s){ setCanvasSize(s[0],s[1]); $("cw").value=s[0]; $("ch").value=s[1]; }
   draw();
 });
-["cw","ch"].forEach(id=>$(id).addEventListener("input", ()=>{ setCanvasSize(parseInt($("cw").value,10), parseInt($("ch").value,10)); draw(); }));
+["cw","ch"].forEach(id=>$(id).addEventListener("input", ()=>{
+  setCanvasSize(parseInt($("cw").value,10), parseInt($("ch").value,10));
+  draw();
+}));
 $("exps").addEventListener("input", updateOutputs);
 
 ["bgType","bg1","bg2","bgOpacity","bgBlur"].forEach(id=>$(id).addEventListener("input", draw));
 ["outlineSize","outlineColor","shadowBlur","shadowY","shadowColor"].forEach(id=>$(id).addEventListener("input", draw));
-
 ["wmText","wmSize","wmOpacity","wmX","wmY"].forEach(id=>$(id).addEventListener("input", draw));
 
 $("reset").addEventListener("click", ()=>{
   if(cardImg){
     T.rot=0; T.skx=0; T.sky=0; T.scl=fitScale(cardImg.width, cardImg.height, canvas.width, canvas.height, 0.8);
     T.tx=0; T.ty=0; T.flipX=1; T.flipY=1;
-    $("rot").value=T.rot; $("skx").value=T.skx; $("sky").value=T.sky; $("scl").value=T.scl; $("tx").value=T.tx; $("ty").value=T.ty;
+    ["rot","skx","sky","scl","tx","ty"].forEach(id=>$(id).value=T[id]);
   }
   draw();
 });
@@ -395,6 +441,7 @@ $("center").addEventListener("click", ()=>{
   draw();
 });
 
+// ---------- Brush (Mask) ----------
 let painting=false;
 let lastX=0,lastY=0;
 function getCanvasPoint(ev){
@@ -422,12 +469,12 @@ function paintAt(ix,iy){
   const mode=$("brushMode").value;
   const g=maskCtx.createRadialGradient(ix,iy, size*hard*0.5, ix,iy, size*0.5);
   if(mode==="erase"){
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,1)");
+    g.addColorStop(0,"rgba(0,0,0,0)");
+    g.addColorStop(1,"rgba(0,0,0,1)");
     maskCtx.globalCompositeOperation="destination-out";
   }else{
-    g.addColorStop(0, "rgba(0,0,0,1)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
+    g.addColorStop(0,"rgba(0,0,0,1)");
+    g.addColorStop(1,"rgba(0,0,0,0)");
     maskCtx.globalCompositeOperation="source-over";
   }
   maskCtx.fillStyle=g;
@@ -436,14 +483,14 @@ function paintAt(ix,iy){
   maskCtx.fill();
 }
 
-canvas.addEventListener("pointerdown", (e)=>{
+canvas.addEventListener("pointerdown",(e)=>{
   if(!cardImg) return;
   painting=true; canvas.setPointerCapture(e.pointerId);
   const {ix,iy}=getCanvasPoint(e);
   pushMaskHistory();
   paintAt(ix,iy); lastX=ix; lastY=iy; draw();
 });
-canvas.addEventListener("pointermove", (e)=>{
+canvas.addEventListener("pointermove",(e)=>{
   if(!painting) return;
   const {ix,iy}=getCanvasPoint(e);
   const steps=Math.max(1, Math.hypot(ix-lastX,iy-lastY)/8|0);
@@ -454,11 +501,12 @@ canvas.addEventListener("pointermove", (e)=>{
   }
   lastX=ix; lastY=iy; draw();
 });
-canvas.addEventListener("pointerup", (e)=>{ painting=false; canvas.releasePointerCapture(e.pointerId); });
-canvas.addEventListener("pointercancel", ()=>{ painting=false; });
+canvas.addEventListener("pointerup",(e)=>{ painting=false; canvas.releasePointerCapture(e.pointerId); });
+canvas.addEventListener("pointercancel",()=>{ painting=false; });
 
 $("brushUndo").addEventListener("click", popMaskHistory);
 
+// ---------- Save / Load ----------
 $("saveSettings").addEventListener("click", ()=>{
   const data={
     cw:canvas.width,ch:canvas.height, T:{...T},
@@ -482,6 +530,7 @@ $("loadSettings").addEventListener("click", ()=>{
   draw();
 });
 
+// ---------- Export ----------
 function exportImage(type="image/png"){
   const scale=parseFloat($("exps").value);
   const out=document.createElement("canvas");
@@ -498,6 +547,7 @@ function exportImage(type="image/png"){
 $("exportPNG").addEventListener("click", ()=>exportImage("image/png"));
 $("exportJPG").addEventListener("click", ()=>exportImage("image/jpeg"));
 
+// ---------- Init ----------
 setCanvasSize(1080,1920);
 draw();
 </script>
